@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# IDEs / editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# torch.utils.cpp_extension cache (per-user, never committed)
+torch_extensions/
+
+# Local artifacts
+runs/
+*.log
+.DS_Store
+.coverage
+htmlcov/
