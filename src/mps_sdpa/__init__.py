@@ -1,5 +1,11 @@
 """mps_sdpa: fast scaled-dot-product attention on Apple silicon MPS."""
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError as _PackageNotFoundError
+from importlib.metadata import version as _pkg_version
+
+try:
+    __version__ = _pkg_version("mps-sdpa")
+except _PackageNotFoundError:
+    __version__ = "0.0.0+unknown"
 
 # Optionally force W&B offline mode at import. Off by default — a library
 # should never silently override its caller's W&B configuration. Set
