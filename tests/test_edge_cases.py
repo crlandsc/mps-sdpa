@@ -23,6 +23,8 @@ from mps_sdpa import sdpa_opt
 from mps_sdpa.backends import mpsgraph as _mg
 from mps_sdpa.backends import mpsgraph_zc as _zc
 
+from tests._tolerances import cross_impl_atol
+
 
 def _can_run() -> bool:
     try:
@@ -80,9 +82,10 @@ def test_very_long_sequence_16k():
 
 @pytest.mark.skipif(not _can_run(), reason="requires zc + MPS")
 def test_non_contiguous_transposed_inputs():
-    """Transposed views (non-contiguous) — we call .contiguous() internally.
-    bf16 arithmetic drift on non-contig paths is higher (~1 ULP = 1/128) because
-    stock's own memory-reorder path may differ from our contig-copy path."""
+    """Transposed views — we call .contiguous() internally, and stock's
+    memory-reorder path may differ from our contig-copy path. Tolerance
+    via cross_impl_atol(non_contig=True): strict-by-default, looser only
+    on chips with observed cross-impl drift (see tests/_tolerances.py)."""
     torch.manual_seed(0)
     x = torch.randn(1, 2048, 4, 64, dtype=torch.bfloat16, device="mps")
     q = x.transpose(1, 2)
@@ -91,12 +94,13 @@ def test_non_contiguous_transposed_inputs():
     assert not q.is_contiguous()
     out = sdpa_opt(q, k, v)
     ref = F.scaled_dot_product_attention(q, k, v)
-    assert (out - ref).abs().max().item() < 1e-2
+    assert (out - ref).abs().max().item() < cross_impl_atol(q.dtype, non_contig=True)
 
 
 @pytest.mark.skipif(not _can_run(), reason="requires zc + MPS")
 def test_sliced_view_inputs():
-    """Sliced (strided) views: Q[..., ::2, :] etc. Same bf16 non-contig drift bound."""
+    """Sliced (strided) views: Q[..., ::2, :] etc. Same non-contig drift
+    profile as test_non_contiguous_transposed_inputs."""
     torch.manual_seed(0)
     full = torch.randn(1, 4, 4096, 64, dtype=torch.bfloat16, device="mps")
     q = full[..., ::2, :]
@@ -104,12 +108,13 @@ def test_sliced_view_inputs():
     v = full[..., ::2, :]
     out = sdpa_opt(q, k, v)
     ref = F.scaled_dot_product_attention(q, k, v)
-    assert (out - ref).abs().max().item() < 1e-2
+    assert (out - ref).abs().max().item() < cross_impl_atol(q.dtype, non_contig=True)
 
 
 @pytest.mark.skipif(not _can_run(), reason="requires zc + MPS")
 def test_mixed_contiguity():
-    """Q contiguous, K and V non-contiguous — common after a permute."""
+    """Q contiguous, K and V non-contiguous — common after a permute.
+    Same non-contig drift profile."""
     torch.manual_seed(0)
     q = torch.randn(1, 4, 2048, 64, dtype=torch.bfloat16, device="mps")
     x = torch.randn(1, 2048, 4, 64, dtype=torch.bfloat16, device="mps")
@@ -117,7 +122,7 @@ def test_mixed_contiguity():
     v = x.transpose(1, 2)
     out = sdpa_opt(q, k, v)
     ref = F.scaled_dot_product_attention(q, k, v)
-    assert (out - ref).abs().max().item() < 1e-2
+    assert (out - ref).abs().max().item() < cross_impl_atol(q.dtype, non_contig=True)
 
 
 # ---- Mask edge cases ----
@@ -139,7 +144,9 @@ def test_all_true_bool_mask_equals_no_mask():
 @pytest.mark.skipif(not _can_run(), reason="requires zc + MPS")
 def test_mostly_false_mask():
     """A mask that blocks most positions should still produce valid softmax
-    as long as each row has at least one unmasked position."""
+    as long as each row has at least one unmasked position. Tolerance via
+    cross_impl_atol — sparse reductions (10 keys) can amplify per-element
+    ULP drift on chips listed in tests/_tolerances.py."""
     torch.manual_seed(0)
     B, H, L, D = 1, 4, 2048, 64
     q = torch.randn(B, H, L, D, dtype=torch.bfloat16, device="mps")
@@ -150,7 +157,7 @@ def test_mostly_false_mask():
     out = sdpa_opt(q, k, v, attn_mask=m)
     ref = F.scaled_dot_product_attention(q, k, v, attn_mask=m)
     assert not torch.isnan(out).any()
-    assert (out - ref).abs().max().item() < 5e-3
+    assert (out - ref).abs().max().item() < cross_impl_atol(q.dtype)
 
 
 @pytest.mark.skipif(not _can_run(), reason="requires zc + MPS")

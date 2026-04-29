@@ -14,6 +14,8 @@ from mps_sdpa import sdpa_opt, available_backends
 from mps_sdpa.backends import mpsgraph_zc as _zc
 from mps_sdpa.backends import mpsgraph as _mg
 
+from tests._tolerances import cross_impl_atol
+
 
 def _can_run() -> bool:
     try:
@@ -73,6 +75,9 @@ def test_zc_handles_per_head_mask():
 
 @pytest.mark.skipif(not _can_run(), reason="requires zc extension + MPS device")
 def test_zc_handles_causal_mask():
+    """Causal mask. Tolerance via cross_impl_atol — the causal first-row
+    reduces over a single key, so per-element ULP drift can dominate on
+    chips with observed cross-impl drift (see tests/_tolerances.py)."""
     torch.manual_seed(0)
     B, H, L, D = 1, 4, 2048, 64
     q = torch.randn(B, H, L, D, dtype=torch.bfloat16, device="mps")
@@ -81,7 +86,7 @@ def test_zc_handles_causal_mask():
     out = sdpa_opt(q, k, v, is_causal=True, backend="mpsgraph_zc")
     ref = F.scaled_dot_product_attention(q, k, v, is_causal=True)
     diff = (out - ref).abs().max().item()
-    assert diff < 5e-3
+    assert diff < cross_impl_atol(q.dtype)
 
 
 @pytest.mark.skipif(not _can_run(), reason="requires zc extension + MPS device")

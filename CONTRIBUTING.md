@@ -37,7 +37,7 @@ cd mps-sdpa
 python -m venv .venv && source .venv/bin/activate
 pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
 pip install -e ".[dev]"
-pytest tests/ -q                 # 213 tests; takes ~50s on M4
+pytest tests/ -q                 # 235 tests; takes ~50s on M4
 mps-sdpa self-test --device mps  # quick correctness + speedup check
 ```
 

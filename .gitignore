@@ -32,3 +32,6 @@ runs/
 .DS_Store
 .coverage
 htmlcov/
+
+# verify_machine.sh output dirs
+verify-results-*/

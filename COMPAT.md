@@ -37,6 +37,20 @@ Tested configurations for the backends shipped in this package.
 
 Thresholds are calibrated once per `(chip, os, torch)` fingerprint and cached to `~/.cache/mps_sdpa/thresholds.json`. Force a re-calibration with `MPS_SDPA_FORCE_CALIBRATE=1`. Skip entirely (use conservative defaults) with `MPS_SDPA_SKIP_CALIBRATION=1`.
 
+## Test tolerance policy
+
+The package's correctness contract — `bf16/fp16 atol=5e-3, fp32 atol=5e-6` — is the standard for **math-reference comparisons** (`mps_sdpa.sdpa_opt(...)` vs a manually-computed reference at the same dtype). The full test suite validates these bounds.
+
+A subset of tests additionally compare `mps_sdpa.sdpa_opt` against `torch.nn.functional.scaled_dot_product_attention` directly. Both implementations are correct within the math-reference contract, but they don't agree bit-exactly with each other — each Apple silicon chip's matmul accumulation kernel rounds slightly differently, so the implementation-vs-implementation drift can exceed `5e-3` even though both implementations are within spec.
+
+For these tests, the suite uses [`tests/_tolerances.py::cross_impl_atol`](tests/_tolerances.py), which returns:
+
+- **Strict (`5e-3` bf16/fp16)** by default — the math-reference contract, used on every chip family unless empirically observed to fail.
+- **Loose (`5e-2` bf16/fp16)** for chips listed in `_LOOSE_CHIPS_BF16` after observed cross-impl drift > `5e-3`. Currently: **Apple M1 family** only.
+- **`non_contig=True` knob** bumps to at least `1e-2` for tests where Q/K/V are non-contiguous views (independent of chip; the contig-copy path drift was documented since v0.1.0).
+
+Adding a new chip to the loose list requires an observed test failure that bisects to bf16 ULP drift (failure on a `2^-N` boundary, no NaN/Inf, magnitude-correlated). The chip family entry must include a comment naming the failing test and the observed delta. This keeps the suite as strict as possible by default and only relaxes where empirically required.
+
 ## Shape / dtype / mask coverage
 
 | Feature | Status | Notes |

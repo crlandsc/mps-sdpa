@@ -216,7 +216,7 @@ autograd wiring, dropout path.
 
 ## Correctness — what's tested
 
-213 tests across 38 files. Highlights:
+235 tests across 39 files. Highlights:
 
 - **Shape matrix:** D ∈ {32, 64, 96, 128, 192, 256}; H ∈ {1..32}; B ∈ {1..32};
   Lq, Lkv ∈ {powers of 2, 777, 1345, 3141}.
