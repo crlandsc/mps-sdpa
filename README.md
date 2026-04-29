@@ -187,7 +187,7 @@ the other (verified).
 
 | Category | Maintainer-tested | Should work (untested by maintainer) | Not supported |
 |---|---|---|---|
-| Apple silicon | M4 (M3 in progress) | M1, M2 (should work via auto-calibration) | — |
+| Apple silicon | M4 mini, M3 Max | M1, M2 (should work via auto-calibration) | — |
 | macOS | 26.x | 15.x (all API surfaces present) | 14.x (op missing — backend registers unavailable) |
 | torch | 2.11 stable + 2.13 nightly | — | — |
 | dtypes | bf16, fp16, fp32 | — | fp64 (MPS doesn't support it) |

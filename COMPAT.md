@@ -16,26 +16,28 @@ Tested configurations for the backends shipped in this package.
 | Category | Minimum | Empirically tested | Notes |
 |---|---|---|---|
 | **macOS** | 15.0 (Sequoia) | **26.x** | Maintainer only tests macOS 26+. macOS 15 should work (all API surfaces we use were introduced in 15.0) but is not on the test path. macOS 14 is unsupported: the `_check_mpsgraph_sdpa_available()` probe returns `(False, reason)` and the backend registers unavailable; no runtime crash, just clear fallback. |
-| **Apple silicon** | (no minimum enforced — chip-agnostic code) | **M4 (M3 in progress)** | M1/M2 not on the maintainer test path; logic is not chip-specific and thresholds auto-calibrate per-machine on first import. Should theoretically work — community reports welcome. |
+| **Apple silicon** | (no minimum enforced — chip-agnostic code) | **M4 mini, M3 Max** | M1/M2 not on the maintainer test path; logic is not chip-specific and thresholds auto-calibrate per-machine on first import. Should theoretically work — community reports welcome. |
 | **PyTorch** | 2.11.0 (stable) | 2.11.0 + 2.13.0.dev20260420 | Both exhaustively validated. No API drift between versions. |
 | **Python** | 3.10 | 3.11.14 | No 3.10-specific features used. |
 | **pyobjc-core** | 10.0 | 12.1 | Required frameworks: Metal, MetalPerformanceShaders, MetalPerformanceShadersGraph. |
 
 ### Hardware / OS coverage commitments
 
-- **Maintainer-tested:** M4 chip, macOS 26.4.1 — the reference configuration. Any claim in this doc is backed by a test here unless noted. M3 testing in progress; this table will be updated when complete.
+- **Maintainer-tested:** Apple M4 mini and M3 Max, macOS 26.4.1, torch 2.11 stable + 2.13 nightly. Any claim in this doc is backed by a test here unless noted.
 - **Should work, not on the test path:** M1, M2; macOS 15.x. The code is chip-agnostic and auto-calibrates thresholds per-machine, and all MPSGraph methods we use are present from macOS 15.0. Bug reports from these configs are welcome, but the maintainer does not plan to test them directly.
 - **Not supported:** macOS 14.x. The `MPSGraph.scaledDotProductAttention` op doesn't exist there; the backend registers as unavailable with a clear reason and `sdpa_opt` falls back to stock cleanly.
 
-## Per-dtype threshold (auto-calibrated, indicative M4 + torch 2.13 nightly values)
+## Per-dtype threshold (auto-calibrated per machine)
 
-| dtype | fused_min_bytes | crossover shape |
-|---|---|---|
-| bf16 | 2 MB | ~1024² |
-| fp16 | 2 MB | ~1024² |
-| fp32 | 16 MB | ~2048² |
+The `(chip, os, torch)` fingerprint determines stock-vs-`mpsgraph_zc` crossover thresholds at first import; cached to `~/.cache/mps_sdpa/thresholds.json`. Reference values from the maintainer's machines:
 
-Thresholds are calibrated once per `(chip, os, torch)` fingerprint and cached to `~/.cache/mps_sdpa/thresholds.json`. Force a re-calibration with `MPS_SDPA_FORCE_CALIBRATE=1`. Skip entirely (use conservative defaults) with `MPS_SDPA_SKIP_CALIBRATION=1`.
+| dtype | M4 mini | M3 Max | notes |
+|---|---|---|---|
+| bf16 | 2 MB (~1024²) | 8 MB (~2048²) | M3 Max's higher memory bandwidth keeps stock competitive at smaller shapes; crossover shifts to longer sequences |
+| fp16 | 2 MB (~1024²) | 8 MB (~2048²) | same |
+| fp32 | 16 MB (~2048²) | **effectively unbounded** | M3 Max stock fp32 wins universally at the calibrator's probe shapes; `mpsgraph_zc` is not auto-selected for fp32 on M3 Max |
+
+Force re-calibration with `MPS_SDPA_FORCE_CALIBRATE=1`. Skip entirely (use conservative defaults) with `MPS_SDPA_SKIP_CALIBRATION=1`.
 
 ## Test tolerance policy
 
