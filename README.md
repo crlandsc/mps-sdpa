@@ -185,12 +185,15 @@ the other (verified).
 
 ## Scope / supported configs
 
-| Category | Tested | Planned | Not planned |
+| Category | Maintainer-tested | Should work (untested by maintainer) | Not supported |
 |---|---|---|---|
-| Apple silicon | M4 | M3 | M1, M2 (should work via auto-calibration) |
-| macOS | 26.4.1 | 15.x | 14.x (documented unsupported — backend registers unavailable) |
+| Apple silicon | M4 (M3 in progress) | M1, M2 (should work via auto-calibration) | — |
+| macOS | 26.x | 15.x (all API surfaces present) | 14.x (op missing — backend registers unavailable) |
 | torch | 2.11 stable + 2.13 nightly | — | — |
 | dtypes | bf16, fp16, fp32 | — | fp64 (MPS doesn't support it) |
+
+Maintainer testing is M-series Apple silicon on macOS 26+ only. Reports
+from other configurations are welcome but no commitment to test them.
 
 ## Architecture
 
@@ -213,7 +216,7 @@ autograd wiring, dropout path.
 
 ## Correctness — what's tested
 
-244 tests across 20 files. Highlights:
+213 tests across 38 files. Highlights:
 
 - **Shape matrix:** D ∈ {32, 64, 96, 128, 192, 256}; H ∈ {1..32}; B ∈ {1..32};
   Lq, Lkv ∈ {powers of 2, 777, 1345, 3141}.

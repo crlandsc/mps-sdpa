@@ -15,19 +15,17 @@ Tested configurations for the backends shipped in this package.
 
 | Category | Minimum | Empirically tested | Notes |
 |---|---|---|---|
-| **macOS** | 15.0 (Sequoia) | **26.4.1 only** | 14.x is documented-unsupported: backend registers `available=False` with a clear reason string (probe via `hasattr` at import). We have not run on a real macOS 14 machine — the unavailable-reason path is validated via monkeypatch only. macOS 15 should work but is not empirically verified. |
-| **Apple silicon** | (no minimum enforced — chip-agnostic code) | **M4** | **Planned:** M3. **Not planned:** M1/M2 (no hardware access; should theoretically work — logic is not chip-specific and thresholds auto-calibrate per-machine on first import). |
+| **macOS** | 15.0 (Sequoia) | **26.x** | Maintainer only tests macOS 26+. macOS 15 should work (all API surfaces we use were introduced in 15.0) but is not on the test path. macOS 14 is unsupported: the `_check_mpsgraph_sdpa_available()` probe returns `(False, reason)` and the backend registers unavailable; no runtime crash, just clear fallback. |
+| **Apple silicon** | (no minimum enforced — chip-agnostic code) | **M4 (M3 in progress)** | M1/M2 not on the maintainer test path; logic is not chip-specific and thresholds auto-calibrate per-machine on first import. Should theoretically work — community reports welcome. |
 | **PyTorch** | 2.11.0 (stable) | 2.11.0 + 2.13.0.dev20260420 | Both exhaustively validated. No API drift between versions. |
 | **Python** | 3.10 | 3.11.14 | No 3.10-specific features used. |
 | **pyobjc-core** | 10.0 | 12.1 | Required frameworks: Metal, MetalPerformanceShaders, MetalPerformanceShadersGraph. |
 
 ### Hardware / OS coverage commitments
 
-- **Tested:** M4 chip, macOS 26.4.1. This is the reference configuration; any claim in this doc is backed by a test here unless noted.
-- **Planned:** M3 testing is on the roadmap. Will update this table with results.
-- **Not planned:** M1 and M2 chips — no hardware access. The code is chip-agnostic and auto-calibrates thresholds per-machine; the headline behavior should work, but we make no empirical guarantees. Report issues if encountered and we'll add a compat shim.
-- **macOS 15:** should work (all API surfaces we use were introduced in 15.0), not yet empirically tested.
-- **macOS 14:** documented-unsupported. The `_check_mpsgraph_sdpa_available()` probe returns `(False, reason)` and the backend is registered unavailable. No runtime crash, just clear fallback.
+- **Maintainer-tested:** M4 chip, macOS 26.4.1 — the reference configuration. Any claim in this doc is backed by a test here unless noted. M3 testing in progress; this table will be updated when complete.
+- **Should work, not on the test path:** M1, M2; macOS 15.x. The code is chip-agnostic and auto-calibrates thresholds per-machine, and all MPSGraph methods we use are present from macOS 15.0. Bug reports from these configs are welcome, but the maintainer does not plan to test them directly.
+- **Not supported:** macOS 14.x. The `MPSGraph.scaledDotProductAttention` op doesn't exist there; the backend registers as unavailable with a clear reason and `sdpa_opt` falls back to stock cleanly.
 
 ## Per-dtype threshold (auto-calibrated, indicative M4 + torch 2.13 nightly values)
 

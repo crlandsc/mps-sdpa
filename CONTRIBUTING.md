@@ -37,7 +37,7 @@ cd mps-sdpa
 python -m venv .venv && source .venv/bin/activate
 pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
 pip install -e ".[dev]"
-pytest tests/ -q                 # 232 tests; takes ~50s on M4
+pytest tests/ -q                 # 213 tests; takes ~50s on M4
 mps-sdpa self-test --device mps  # quick correctness + speedup check
 ```
 
@@ -131,28 +131,29 @@ See `backends/mpsgraph_zc.py` for a full example.
 ## Releases
 
 Releases use **PyPI Trusted Publishers** (OIDC) — no API tokens. The
-`.github/workflows/release.yml` workflow handles the build + upload.
+`.github/workflows/pypi.yml` workflow handles test → build → upload, gated
+by tag push only (regular pushes to `main` do **not** trigger a release).
 
 Workflow:
-1. Bump `version` in `pyproject.toml` and add a new `## [x.y.z]` entry to
-   `CHANGELOG.md`. Commit + push to `main`.
-2. **Smoke test on TestPyPI** first:
+1. Run the full local pre-flight on M4 / macOS 26:
    ```bash
-   gh workflow run release.yml --field target=testpypi
-   gh run watch
-   ```
-   Then verify install in a fresh venv:
-   ```bash
-   python -m venv /tmp/verify-testpypi && source /tmp/verify-testpypi/bin/activate
-   pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
-   pip install --index-url https://test.pypi.org/simple/ \
-               --extra-index-url https://pypi.org/simple/ mps-sdpa==<x.y.z>
+   pytest tests/ -q
    mps-sdpa self-test --device mps
    ```
-3. **Cut the GitHub release** — auto-publishes to real PyPI:
+2. Bump `version` in `pyproject.toml` and add a new `## [x.y.z]` entry to
+   `CHANGELOG.md`. Commit + push to `main`.
+3. Tag and push — this fires the publish workflow:
+   ```bash
+   git tag v<x.y.z>
+   git push origin v<x.y.z>
+   ```
+   Or cut a GitHub release (which creates the tag too):
    ```bash
    gh release create v<x.y.z> --title "v<x.y.z>" --notes-file CHANGELOG.md --target main
    ```
+
+The workflow runs the test suite first; if anything fails, the publish step
+does not run and nothing is uploaded to PyPI.
 
 Local sanity build (no upload):
 ```bash

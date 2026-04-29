@@ -221,6 +221,6 @@ Every PR should:
 3. For benchmark-affecting changes: `mps-sdpa benchmark --backend mpsgraph_zc
    --baseline stock --suite realistic` and attach the geomean delta.
 
-The release workflow (`.github/workflows/release.yml`) runs the build +
+The release workflow (`.github/workflows/pypi.yml`) runs the build +
 metadata check on Linux for every tag/dispatch — full MPS testing must be
 done locally on Apple silicon hardware.
