@@ -12,31 +12,11 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Reuse the standalone Tests workflow as a job here. Single source of truth
+  # for what "tests pass" means — same definition fires on push to main, on
+  # PRs, on manual dispatch, and as the gate for this publish flow.
   test:
-    name: Run tests on Apple silicon 🧪
-    # MPS is only available on macOS arm64 runners. Linux runners would skip
-    # every MPS-gated test silently — that's a no-op gate. macos-latest
-    # currently maps to an Apple silicon SKU and ships Xcode CLT, which the
-    # zero-copy C++ extension needs to JIT-compile.
-    runs-on: macos-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-
-      - name: Run tests
-        run: pytest tests/ -q
+    uses: ./.github/workflows/tests.yml
 
   build:
     name: Build distribution 📦

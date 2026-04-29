@@ -221,6 +221,16 @@ Every PR should:
 3. For benchmark-affecting changes: `mps-sdpa benchmark --backend mpsgraph_zc
    --baseline stock --suite realistic` and attach the geomean delta.
 
-The release workflow (`.github/workflows/pypi.yml`) runs the build +
-metadata check on Linux for every tag/dispatch — full MPS testing must be
-done locally on Apple silicon hardware.
+CI workflows:
+- `.github/workflows/tests.yml` — runs `pytest tests/ -q` on `macos-latest`
+  (Apple silicon, M1 / current macOS) on every push to main, every PR, and
+  on manual dispatch. The C++ extension JIT-compiles in CI; MPS-gated tests
+  actually exercise the backend, not skip.
+- `.github/workflows/pypi.yml` — fires only on tag push (`v*`) or manual
+  dispatch. Calls `tests.yml` as a reusable workflow, then builds wheel +
+  sdist, runs `twine check`, and publishes to PyPI via OIDC. Tests gate
+  publish: a failure in `tests.yml` blocks the build and publish jobs.
+
+Note: CI runs on M1 / macOS 15. Maintainer pre-tag testing on M-series /
+macOS 26 remains the source of truth for the documented perf numbers; CI
+is necessary but not sufficient for that claim.
