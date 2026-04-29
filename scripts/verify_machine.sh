@@ -21,6 +21,27 @@ set -euo pipefail
 OUT_DIR="${OUT_DIR:-./verify-results-$(date +%Y%m%d-%H%M%S)}"
 SKIP_BENCH="${SKIP_BENCH:-0}"
 
+# --- Preflight ---------------------------------------------------------------
+# mps_sdpa must be importable in the active Python env. Fail loudly with
+# setup instructions rather than half-running and hitting a ModuleNotFoundError
+# buried in the env-metadata step.
+if ! python3 -c "import mps_sdpa" 2>/dev/null; then
+    PY_PREFIX=$(python3 -c 'import sys; print(sys.prefix)' 2>/dev/null || echo unknown)
+    cat >&2 <<EOF
+ERROR: mps_sdpa is not importable in the active Python environment.
+Active env: $PY_PREFIX
+
+From the repo root, set up per CONTRIBUTING.md:
+
+    python -m venv .venv && source .venv/bin/activate
+    pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
+    pip install -e ".[dev]"
+
+Then re-run scripts/verify_machine.sh.
+EOF
+    exit 1
+fi
+
 mkdir -p "$OUT_DIR"
 echo "Output dir: $OUT_DIR"
 echo
