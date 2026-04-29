@@ -1,6 +1,10 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: Publish Python 🐍 distribution 📦 to PyPI
 
+# Triggers:
+#   - push of a tag matching v*  (canonical release path)
+#   - workflow_dispatch          (manual escape hatch from the GitHub UI)
+# Regular pushes to main do NOT trigger this workflow.
 on:
   push:
     tags:
@@ -9,8 +13,12 @@ on:
 
 jobs:
   test:
-    name: Run tests 🧪
-    runs-on: ubuntu-latest
+    name: Run tests on Apple silicon 🧪
+    # MPS is only available on macOS arm64 runners. Linux runners would skip
+    # every MPS-gated test silently — that's a no-op gate. macos-latest
+    # currently maps to an Apple silicon SKU and ships Xcode CLT, which the
+    # zero-copy C++ extension needs to JIT-compile.
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +28,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
@@ -64,7 +72,9 @@ jobs:
 
   publish-to-pypi:
     name: Publish 🐍 to PyPI
-    needs: build
+    # Explicitly require both jobs. `build` already needs `test` transitively,
+    # but listing both here makes the gating intent obvious in the workflow.
+    needs: [test, build]
     runs-on: ubuntu-latest
 
     environment:
