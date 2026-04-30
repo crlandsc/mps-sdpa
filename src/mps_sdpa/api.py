@@ -197,6 +197,26 @@ def sdpa_opt(
     ):
         attn_mask = attn_mask.to(dtype=query.dtype)
 
+    # is_causal=True combined with an explicit attn_mask: PyTorch's MPS
+    # F.scaled_dot_product_attention crashes the process here with
+    # NSInvalidArgumentException (torch issue, not ours). Combine the
+    # two ourselves before any backend dispatch, then clear is_causal.
+    # Logical AND for bool masks; additive (-inf where blocked) for float.
+    if is_causal and attn_mask is not None:
+        Lq = query.shape[-2]
+        Lkv = key.shape[-2]
+        causal = torch.ones(Lq, Lkv, dtype=torch.bool, device=query.device).tril()
+        if attn_mask.dtype == torch.bool:
+            # Broadcast-friendly AND. attn_mask may be [..., Lq, Lkv] of any
+            # leading shape; causal is [Lq, Lkv] and broadcasts cleanly.
+            attn_mask = attn_mask & causal
+        else:
+            # Additive float mask: -inf where the causal mask blocks.
+            additive_causal = torch.zeros_like(attn_mask)
+            additive_causal.masked_fill_(~causal, float("-inf"))
+            attn_mask = attn_mask + additive_causal
+        is_causal = False
+
     Hq, Hkv = query.shape[-3], key.shape[-3]
     if Hq != Hkv:
         _call_counts["gqa_fallback"] += 1

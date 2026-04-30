@@ -13,7 +13,6 @@ Categories:
 - Integration patterns (nn.MultiheadAttention-style, torch.compile)
 """
 from __future__ import annotations
-import threading
 
 import pytest
 import torch
@@ -22,7 +21,6 @@ import torch.nn.functional as F
 from mps_sdpa import sdpa_opt
 from mps_sdpa.backends import mpsgraph as _mg
 from mps_sdpa.backends import mpsgraph_zc as _zc
-
 from tests._tolerances import cross_impl_atol
 
 
@@ -311,3 +309,29 @@ def test_random_shapes_match_stock():
         ref = F.scaled_dot_product_attention(q, k, v)
         diff = (out - ref).abs().max().item()
         assert diff < 5e-3, f"B={B} H={H} L={L} D={D} diff={diff}"
+
+
+# ---- Combined fallback paths ----
+
+@pytest.mark.skipif(not _can_run(), reason="requires zc + MPS")
+def test_causal_with_explicit_mask_falls_back_correctly():
+    """is_causal=True combined with explicit attn_mask is a documented
+    fallback path. PyTorch MPS's F.scaled_dot_product_attention crashes
+    the process when given both arguments (NSInvalidArgumentException),
+    so api.py combines the two into a single attn_mask before dispatch.
+    Output must match stock SDPA called with the equivalent single-mask
+    form. Closes Gap 3 from the v0.2.0 test-coverage audit."""
+    torch.manual_seed(0)
+    B, H, L, D = 1, 4, 1024, 64
+    q = torch.randn(B, H, L, D, dtype=torch.bfloat16, device="mps")
+    k = torch.randn(B, H, L, D, dtype=torch.bfloat16, device="mps")
+    v = torch.randn(B, H, L, D, dtype=torch.bfloat16, device="mps")
+    # Bool mask that allows everything (combined with is_causal still
+    # produces the upper-triangular-blocked result).
+    extra_mask = torch.ones(1, 1, L, L, dtype=torch.bool, device="mps")
+    out_opt = sdpa_opt(q, k, v, is_causal=True, attn_mask=extra_mask)
+    # Reference: equivalent single-arg form (just is_causal). Stock MPS
+    # handles this fine; the crash only happens when BOTH args are passed
+    # to F.scaled_dot_product_attention.
+    out_ref = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+    assert (out_opt - out_ref).abs().max().item() < cross_impl_atol(q.dtype)
