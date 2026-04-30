@@ -15,14 +15,27 @@ When dropout is requested we fall back to the pyobjc path (which has the
 unfused dropout graph). Everything else goes through the zero-copy path.
 """
 from __future__ import annotations
+
 from typing import Optional
 
 import torch
-from torch.autograd.function import once_differentiable
 
-from . import register_backend
+from . import _calibrate, register_backend
 from . import mpsgraph as _pyobjc_mpsgraph
-from . import _calibrate
+
+
+def _is_oom(exc: BaseException) -> bool:
+    """True iff exc represents an MPS out-of-memory condition.
+
+    torch.OutOfMemoryError is the canonical class (stable since torch 2.4);
+    some MPS code paths still raise plain RuntimeError with a substring like
+    'out of memory' or 'MPS allocated', so we cover both.
+    """
+    if isinstance(exc, torch.OutOfMemoryError):
+        return True
+    msg = str(exc).lower()
+    return "out of memory" in msg or "mps allocated" in msg
+
 
 _EXT = None
 _REASON: str | None = None
@@ -55,39 +68,6 @@ def _build_additive_mask(bool_mask: torch.Tensor, dtype: torch.dtype) -> torch.T
     add = torch.zeros(bool_mask.shape, dtype=torch.float32, device=bool_mask.device)
     add.masked_fill_(~bool_mask, float("-inf"))
     return add.to(dtype=dtype).contiguous()
-
-
-class _ZCSDPAFunction(torch.autograd.Function):
-    """Autograd wrapper around the C++ extension's forward + backward.
-    Supports optional dropout_mask (same dropout semantics as pyobjc backend).
-    """
-
-    @staticmethod
-    def forward(ctx, q, k, v, mask_tensor, scale, dropout_mask):
-        ctx.save_for_backward(q, k, v)
-        ctx.mask = mask_tensor
-        ctx.scale = scale
-        ctx.dropout_mask = dropout_mask
-        with torch.no_grad():
-            return _EXT.sdpa_forward(q.contiguous(), k.contiguous(),
-                                     v.contiguous(), mask_tensor, dropout_mask)
-
-    @staticmethod
-    @once_differentiable
-    def backward(ctx, grad_out):
-        q, k, v = ctx.saved_tensors
-        mask = ctx.mask
-        scale = ctx.scale
-        dropout_mask = ctx.dropout_mask
-        D = q.shape[-1]
-        if scale is not None and abs(scale - D ** -0.5) > 1e-9:
-            s_ratio = scale / (D ** -0.5)
-            q_scaled = q * s_ratio
-            dQ, dK, dV = _EXT.sdpa_backward(q_scaled, k, v, grad_out, mask, dropout_mask)
-            dQ = dQ * s_ratio
-        else:
-            dQ, dK, dV = _EXT.sdpa_backward(q, k, v, grad_out, mask, dropout_mask)
-        return (dQ, dK, dV, None, None, None)
 
 
 def mpsgraph_zc_sdpa(
@@ -162,9 +142,9 @@ def mpsgraph_zc_sdpa(
     dropout_mask: Optional[torch.Tensor] = None
     if dropout_p > 0:
         keep = 1.0 - dropout_p
-        dropout_mask = (torch.rand(B, H, Lq, Lkv, device="mps", dtype=q.dtype) < keep).to(q.dtype) / keep
+        rand = torch.rand(B, H, Lq, Lkv, device="mps", dtype=q.dtype)
+        dropout_mask = (rand < keep).to(q.dtype) / keep
 
-    needs_grad = q.requires_grad or k.requires_grad or v.requires_grad
     try:
         # This is the true "zero-copy path succeeded" counter — reached only
         # after every short-seq / dtype / mask / dropout fallback check has passed.
@@ -173,13 +153,22 @@ def mpsgraph_zc_sdpa(
             _call_counts["mpsgraph_zc"] += 1
         except Exception:
             pass
-        if needs_grad:
-            return _ZCSDPAFunction.apply(q_eff, k, v, mask_tensor, scale, dropout_mask)
-        return _EXT.sdpa_forward(q_eff.contiguous(), k.contiguous(), v.contiguous(),
-                                  mask_tensor, dropout_mask)
-    except RuntimeError as e:
+        # Both grad and no-grad paths route through the registered custom op
+        # for torch.compile compatibility. The op's register_autograd handles
+        # the backward; register_fake handles FakeTensor shape propagation.
+        from . import torch_compile_op as _tco
+        return _tco.sdpa_forward_op(
+            q_eff.contiguous(), k.contiguous(), v.contiguous(),
+            mask_tensor, dropout_mask,
+        )
+    except (torch.OutOfMemoryError, RuntimeError) as e:
         # Graceful OOM fallback (unfused dropout graph can OOM at very long seqs).
-        if "out of memory" in str(e).lower() or "mps allocated" in str(e).lower():
+        # Free any cached blocks before retry so the fallback has the best chance.
+        if _is_oom(e):
+            try:
+                torch.mps.empty_cache()
+            except Exception:
+                pass
             return _fallback_to_pyobjc(q, k, v, attn_mask=attn_mask, dropout_p=dropout_p,
                                         is_causal=is_causal, scale=scale)
         raise
