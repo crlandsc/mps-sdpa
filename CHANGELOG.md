@@ -5,7 +5,97 @@ All notable changes to mps-sdpa.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.1] — UNRELEASED
+## [0.2.0] — 2026-04-30
+
+### Fixed
+
+- **Double-scaling in zero-copy backward.** `_ZCSDPAFunction.backward()`
+  was applying the scale ratio twice when callers passed a non-default
+  `scale` parameter to `sdpa_opt`: once via `q_scaled = q * s_ratio`
+  before the backward graph, and again via `dQ = dQ * s_ratio` after.
+  Net effect: dQ off by `s_ratio²`, dK/dV off by `s_ratio`. The
+  default-scale path (most users) was unaffected. Latent since v0.1.0.
+  Surfaced and fixed via the new `tests/test_backward_scale.py`
+  regression test (Gap 2 of the v0.1.1 test-coverage audit).
+- **Process crash on `is_causal=True` + explicit `attn_mask`.**
+  PyTorch's MPS `F.scaled_dot_product_attention` raises
+  `NSInvalidArgumentException` when given both arguments; our wrapper's
+  fallback path was passing both through, killing the user's process.
+  `api.sdpa_opt` now combines the two into a single `attn_mask`
+  (logical AND for bool, additive for float) before any backend
+  dispatch, then clears `is_causal`. No backend ever sees both args;
+  PyTorch never crashes. Latent since v0.1.0. Closes Gap 3 of the
+  test-coverage audit.
+
+### Added
+
+- **`torch.compile` compatibility.** `sdpa_opt` traces cleanly under
+  `torch.compile` via the modern `torch.library.custom_op` +
+  `register_autograd` pattern. The C++ extension surface is unchanged;
+  the legacy `_ZCSDPAFunction(torch.autograd.Function)` wrapper has
+  been replaced by `mps_sdpa::sdpa_forward` and `mps_sdpa::sdpa_backward`
+  registered custom ops with `register_fake` shape kernels and
+  `register_autograd` for the backward. Eager-mode behavior unchanged.
+  Seven new tests pin forward + backward + masked + dropout-entropy +
+  second-order numerics under `torch.compile`.
+- **Per-reason fallback diagnostics.** `mps_sdpa.get_fallback_stats()`
+  / `print_fallback_stats()` / `reset_fallback_stats()`. Returns counts
+  bucketed by canonical reason (short-seq, dropout-window, OOM-recovery,
+  causal-and-explicit-mask, etc.) so users can see at a glance why
+  their hot path is going to stock without parsing log lines.
+- **Calibration improvements.** Finer probe-shape resolution
+  (256/384/512/768/1024/1536/2048) for more precise crossover
+  detection. When no probe shape wins for a dtype, the threshold is
+  now stored as `null` in `~/.cache/mps_sdpa/thresholds.json`
+  (previously: `2**40` sentinel). Schema version bumped 1→2; old
+  caches automatically invalidate. New `MPS_SDPA_LOG_CALIBRATION=1`
+  env var prints calibrated thresholds on completion.
+- **Robust OOM detection.** `_is_oom()` helper uses
+  `torch.OutOfMemoryError` exception class first, falls back to
+  string match for older paths. `torch.mps.empty_cache()` is called
+  before the retry to give the fallback the best chance.
+- **Test coverage gaps closed.** Three coverage gaps from the v0.1.1
+  audit are now covered: backward with non-default `scale` (4
+  parametrize cases), `is_causal=True` combined with explicit
+  `attn_mask` fallback, live OOM fallback (env-var gated).
+- **CI matrix expansion.** Python 3.11 + 3.13 on push/PR; full
+  {3.10–3.13} × {torch stable, nightly} matrix on a 03:00 UTC nightly
+  cron via `.github/workflows/nightly.yml`.
+- **Strict ruff lint.** `[tool.ruff]` config in `pyproject.toml`
+  selecting `["E", "F", "W", "I"]`. Codebase fully cleaned (150
+  violations → 0 across 60+ source/test files) while preserving exact
+  behavior (235/235 → 254/254 tests, byte-identical correctness
+  numbers). Separate Linux lint job in `tests.yml` runs alongside the
+  macOS test job; both must pass for publish.
+- **GitHub Actions Node 24 migration.** `actions/checkout@v5`,
+  `actions/setup-python@v6`, `actions/download-artifact@v5` (correcting
+  a v6 typo from v0.1.1). Forced Node 24 default starts 2026-06-02;
+  ahead of the deadline.
+
+### Performance
+
+No per-call performance changes. The `torch.compile` path produces
+output numerically identical to the eager path within
+`cross_impl_atol(dtype)` tolerance.
+
+### Notes
+
+- **Pre-built wheels deferred to v0.3.0.** A stable-ABI build spike
+  found that pybind11 (transitively included via `torch/extension.h`)
+  is not yet `Py_LIMITED_API`-compatible — the build fails before
+  reaching any of our ATen surface. The single-wheel-per-Python route
+  is therefore not viable in v0.2.0; a per-(torch × python) matrix
+  remains an option but was declined here on maintenance-cost grounds.
+  Reconsider when pybind11 stable-ABI support lands or when migrating
+  to a non-pybind11 binding (e.g., `nanobind` with `stable_abi=True`).
+  Full rationale in [`docs/design/v0.2.0-research.md`](docs/design/v0.2.0-research.md#13--pre-built-wheels).
+- The implementation plan that drove this release is
+  [`docs/design/v0.2.0-implementation-plan.md`](docs/design/v0.2.0-implementation-plan.md).
+- Test count: 235 → 254 (+19 across 4 new test files).
+
+[0.2.0]: https://github.com/crlandsc/mps-sdpa/releases/tag/v0.2.0
+
+## [0.1.1] — 2026-04-29
 
 ### Added
 

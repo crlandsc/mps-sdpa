@@ -26,7 +26,7 @@ mps_sdpa/
 │   ├── suites/                  # shape suites (correctness, realistic, general)
 │   ├── training_check/          # synthetic trainer + loss compare + checkpoint interchange
 │   └── utils/                   # env mgmt, thermal helpers
-├── tests/                       # pytest suite (235 tests)
+├── tests/                       # pytest suite (254 tests)
 ├── pyproject.toml               # packaging
 ├── docs/design/                 # design notes (rationale, benchmarks, kernel experiment)
 └── (top-level docs: README.md, ARCHITECTURE.md, COMPAT.md, CONTRIBUTING.md, CHANGELOG.md)
@@ -216,7 +216,7 @@ deterministic — individual tests that need real calibration override.
 ## Reproducibility checks
 
 Every PR should:
-1. `pytest tests/ -q` — full suite, 235 tests.
+1. `pytest tests/ -q` — full suite, 254 tests.
 2. `mps-sdpa self-test --device mps` — quick correctness + speedup check.
 3. For benchmark-affecting changes: `mps-sdpa benchmark --backend mpsgraph_zc
    --baseline stock --suite realistic` and attach the geomean delta.

@@ -208,15 +208,22 @@ autograd wiring, dropout path.
 - **Second-order gradients** (`create_graph=True` on our output's grad):
   raises a clear error. Backward uses MPSGraph which is opaque to torch
   autograd; true higher-order would require a differentiable backward impl.
-- **torch.compile (full graph capture):** untested. The JIT-compiled C++
-  extension is compatible with eager mode; inductor integration is future work.
 - **macOS 14:** the `MPSGraph.scaledDotProductAttention` method doesn't exist
   on Sequoia's predecessor. Backend registers as unavailable with a clear
   reason; calls fall back to stock.
 
+## What works
+
+- **`torch.compile`:** supported via `torch.library.custom_op` +
+  `register_autograd` + `register_fake` (added in v0.2.0). `sdpa_opt`
+  traces cleanly under `torch.compile(..., dynamic=False)`; output is
+  numerically identical to eager mode within `cross_impl_atol(dtype)`.
+  Six dedicated equivalence tests in `tests/test_torch_compile.py` cover
+  forward, backward, masked, dropout-entropy, and `opcheck` smoke.
+
 ## Correctness — what's tested
 
-235 tests across 39 files. Highlights:
+254 tests across 43 files. Highlights:
 
 - **Shape matrix:** D ∈ {32, 64, 96, 128, 192, 256}; H ∈ {1..32}; B ∈ {1..32};
   Lq, Lkv ∈ {powers of 2, 777, 1345, 3141}.

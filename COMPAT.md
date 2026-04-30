@@ -72,6 +72,7 @@ Adding a new chip to the loose list requires an observed test failure that bisec
 | torch.utils.checkpoint | ✓ | Graph cache survives re-entry |
 | retain_graph / grad accumulation | ✓ | |
 | Mid-run backend toggle | ✓ | Flag on each `Attend` module; no weight corruption |
+| `torch.compile` (Inductor) | ✓ (v0.2.0+) | Via `torch.library.custom_op` + `register_autograd` + `register_fake`. `dynamic=False` tested; output matches eager within `cross_impl_atol(dtype)`. Six equivalence tests in `tests/test_torch_compile.py`. |
 
 ## Known limitations
 
