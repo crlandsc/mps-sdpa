@@ -1,9 +1,5 @@
 """Tests for the shape-threshold auto-calibration module."""
-import json
-import os
-from pathlib import Path
 
-import pytest
 import torch
 
 from mps_sdpa.backends import _calibrate
@@ -112,7 +108,6 @@ def test_invalidate_drops_memo_and_file(tmp_path, monkeypatch):
 
 def test_calibrate_module_thresholds_flow_into_dispatch(monkeypatch):
     """Dispatch picks per-dtype threshold from _calibrate.get_thresholds()."""
-    from mps_sdpa.backends import mpsgraph as _mg
     # Override thresholds via in-memory cache
     fake = {
         "fused_min_bytes": {"bf16": 999_999_999, "fp16": 999_999_999, "fp32": 999_999_999},
@@ -125,3 +120,35 @@ def test_calibrate_module_thresholds_flow_into_dispatch(monkeypatch):
     # We can't actually run a real MPS call here in sandbox, so just validate
     # the code path chooses fallback by inspecting the threshold lookup.
     assert _calibrate.get_thresholds()["fused_min_bytes"]["bf16"] == 999_999_999
+
+
+def test_no_win_dtype_returns_none(monkeypatch):
+    """When no probe shape wins for a dtype, _calibrate_dtype returns None
+    (not 2**40). This is part of the v0.2.0 calibration improvements."""
+    from mps_sdpa.backends import _calibrate
+    # Mock _bench_shape so stock always wins by enough margin
+    monkeypatch.setattr(_calibrate, "_bench_shape",
+                        lambda L, dtype, use_mpsg: 1.0 if use_mpsg else 0.99)
+    result = _calibrate._calibrate_dtype(torch.bfloat16, 2)
+    assert result is None, f"expected None for never-wins; got {result}"
+
+
+def test_schema_version_bump_invalidates_old_cache(tmp_path, monkeypatch):
+    """An on-disk cache with schema=1 must be ignored after the v2 bump."""
+    import json
+
+    from mps_sdpa.backends import _calibrate
+
+    monkeypatch.setattr(_calibrate, "_CACHE_FILE", tmp_path / "thresholds.json")
+    fp = _calibrate._fingerprint()
+    fp_old = {**fp, "schema": 1}
+    (tmp_path / "thresholds.json").write_text(json.dumps({
+        "fingerprint": fp_old,
+        "thresholds": {
+            "fused_min_bytes": {"bf16": 1024, "fp16": 1024, "fp32": 1024},
+            "dropout_min_bytes": 1024,
+            "dropout_max_bytes": 4096,
+            "calibrated": True,
+        },
+    }))
+    assert _calibrate._load_cache() is None

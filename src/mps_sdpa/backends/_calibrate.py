@@ -11,6 +11,7 @@ Env vars:
   MPS_SDPA_FORCE_CALIBRATE=1    Ignore cache, re-calibrate and overwrite.
 """
 from __future__ import annotations
+
 import json
 import os
 import platform
@@ -23,7 +24,7 @@ import torch
 
 _CACHE_DIR = Path.home() / ".cache" / "mps_sdpa"
 _CACHE_FILE = _CACHE_DIR / "thresholds.json"
-_CACHE_SCHEMA_VERSION = 1
+_CACHE_SCHEMA_VERSION = 2
 
 # Conservative defaults (M4-calibrated). Used when calibration is skipped,
 # MPS unavailable, cache miss + bench fails, or cross-machine.
@@ -88,6 +89,7 @@ def _save_cache(thresholds: dict) -> None:
 def _bench_shape(L: int, dtype: torch.dtype, use_mpsg: bool) -> float:
     """Return min-of-N wall-clock seconds for a single SDPA call."""
     import torch.nn.functional as F
+
     from . import mpsgraph as _mg
 
     q = torch.randn(1, 8, L, 64, dtype=dtype, device="mps")
@@ -111,7 +113,7 @@ def _bench_shape(L: int, dtype: torch.dtype, use_mpsg: bool) -> float:
     return min(times)
 
 
-def _calibrate_dtype(dtype: torch.dtype, elem_size: int) -> int:
+def _calibrate_dtype(dtype: torch.dtype, elem_size: int) -> Optional[int]:
     """Find smallest L in {256, 1024, 2048} where mpsgraph wins by >= 5%.
 
     Returns the bytes threshold (inclusive): L * L * elem_size. If no shape
@@ -119,7 +121,7 @@ def _calibrate_dtype(dtype: torch.dtype, elem_size: int) -> int:
     disabled for this dtype.
     """
     SAFETY_RATIO = 1.05  # need at least 5% win over stock to justify switching
-    for L in (256, 1024, 2048):
+    for L in (256, 384, 512, 768, 1024, 1536, 2048):
         try:
             t_stock = _bench_shape(L, dtype, use_mpsg=False)
             t_mpsg = _bench_shape(L, dtype, use_mpsg=True)
@@ -132,8 +134,8 @@ def _calibrate_dtype(dtype: torch.dtype, elem_size: int) -> int:
         ratio = t_stock / t_mpsg
         if ratio >= SAFETY_RATIO:
             return L * L * elem_size
-    # Nothing we measured wins. Set an effectively-infinite threshold.
-    return 2**40  # 1 TB
+    # Nothing we measured wins. Return None to mark "always fall back to stock".
+    return None
 
 
 def _can_calibrate() -> bool:
@@ -173,6 +175,14 @@ def _calibrate() -> dict:
     }
     for dtype, elem in elem_sizes.items():
         out["fused_min_bytes"][dtype_keys[dtype]] = _calibrate_dtype(dtype, elem)
+    if os.environ.get("MPS_SDPA_LOG_CALIBRATION") == "1":
+        items = []
+        for k, v in out["fused_min_bytes"].items():
+            if v is None:
+                items.append(f"{k}=always-stock")
+            else:
+                items.append(f"{k}={v // 1024**2}MB")
+        print("[mps_sdpa.calibrate] " + ", ".join(items), flush=True)
     return out
 
 
