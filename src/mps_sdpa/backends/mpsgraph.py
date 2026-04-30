@@ -13,9 +13,13 @@ extension in mpsgraph_zc.py, which avoids the CPU memcpy entirely via
 ATen's `getMTLBufferStorage`.
 """
 from __future__ import annotations
+
 import ctypes
+import logging as _logging
+import os as _os
 import threading
 from typing import Optional
+
 import torch
 from torch.autograd.function import once_differentiable
 
@@ -25,10 +29,11 @@ _AVAILABLE = False
 _UNAVAILABLE_REASON: str | None = None
 
 try:
-    import objc
     from Metal import MTLCreateSystemDefaultDevice
     from MetalPerformanceShadersGraph import (
-        MPSGraph, MPSGraphTensorData, MPSGraphDevice,
+        MPSGraph,
+        MPSGraphDevice,
+        MPSGraphTensorData,
     )
     _AVAILABLE = True
 except Exception as e:
@@ -153,7 +158,11 @@ def _copy_tensor_data_to_torch(buf, out: torch.Tensor):
     mv = buf.contents().as_buffer(nbytes)
     data = bytes(mv)  # snapshot
     if out.dtype == torch.bfloat16:
-        cpu = torch.frombuffer(bytearray(data), dtype=torch.int16).view(out.shape).view(torch.bfloat16)
+        cpu = (
+            torch.frombuffer(bytearray(data), dtype=torch.int16)
+            .view(out.shape)
+            .view(torch.bfloat16)
+        )
     else:
         cpu = torch.frombuffer(bytearray(data), dtype=out.dtype).view(out.shape)
     out.copy_(cpu.to("mps"))
@@ -200,13 +209,15 @@ def _build_graph_unlocked(
     if not dropout:
         if mask_kind != "none":
             mask_ph = g.placeholderWithShape_dataType_name_(mask_pl_shape, dtype_val, "mask")
-            out_ph = g.scaledDotProductAttentionWithQueryTensor_keyTensor_valueTensor_maskTensor_scale_name_(
-                q_ph, k_ph, v_ph, mask_ph, scale, "sdpa_masked"
+            sdpa_masked = (
+                g.scaledDotProductAttentionWithQueryTensor_keyTensor_valueTensor_maskTensor_scale_name_
             )
+            out_ph = sdpa_masked(q_ph, k_ph, v_ph, mask_ph, scale, "sdpa_masked")
         else:
-            out_ph = g.scaledDotProductAttentionWithQueryTensor_keyTensor_valueTensor_scale_name_(
-                q_ph, k_ph, v_ph, scale, "sdpa"
+            sdpa = (
+                g.scaledDotProductAttentionWithQueryTensor_keyTensor_valueTensor_scale_name_
             )
+            out_ph = sdpa(q_ph, k_ph, v_ph, scale, "sdpa")
     else:
         # Dropout path: unfused build. Use the same mathematical form as MATH backend.
         scale_t = g.constantWithScalar_dataType_(scale, dtype_val)
@@ -215,12 +226,18 @@ def _build_graph_unlocked(
         scores = g.multiplicationWithPrimaryTensor_secondaryTensor_name_(qk, scale_t, "scores")
         if mask_kind != "none":
             mask_ph = g.placeholderWithShape_dataType_name_(mask_pl_shape, dtype_val, "mask")
-            scores = g.additionWithPrimaryTensor_secondaryTensor_name_(scores, mask_ph, "scores_masked")
+            scores = g.additionWithPrimaryTensor_secondaryTensor_name_(
+                scores, mask_ph, "scores_masked",
+            )
         attn = g.softMaxWithTensor_axis_name_(scores, -1, "attn")
         # Dropout mask is shape [B, H, Lq, Lkv]; already scaled by 1/(1-p).
         drop_ph = g.placeholderWithShape_dataType_name_([B, H, Lq, Lkv], dtype_val, "drop_mask")
-        attn_dropped = g.multiplicationWithPrimaryTensor_secondaryTensor_name_(attn, drop_ph, "attn_dropped")
-        out_ph = g.matrixMultiplicationWithPrimaryTensor_secondaryTensor_name_(attn_dropped, v_ph, "out")
+        attn_dropped = g.multiplicationWithPrimaryTensor_secondaryTensor_name_(
+            attn, drop_ph, "attn_dropped",
+        )
+        out_ph = g.matrixMultiplicationWithPrimaryTensor_secondaryTensor_name_(
+            attn_dropped, v_ph, "out",
+        )
     _graph_cache[key] = (g, q_ph, k_ph, v_ph, mask_ph, drop_ph, out_ph)
     return _graph_cache[key]
 
@@ -278,7 +295,9 @@ def _build_bwd_graph_unlocked(
 
     # Effective attn used in forward: attn_raw * dropout_mask (post-softmax)
     if drop_ph is not None:
-        attn_used = g.multiplicationWithPrimaryTensor_secondaryTensor_name_(attn_raw, drop_ph, "attn_dropped")
+        attn_used = g.multiplicationWithPrimaryTensor_secondaryTensor_name_(
+            attn_raw, drop_ph, "attn_dropped",
+        )
     else:
         attn_used = attn_raw
 
@@ -288,25 +307,39 @@ def _build_bwd_graph_unlocked(
 
     # d_attn_used = grad_out @ V^T
     v_T = g.transposeTensor_dimension_withDimension_name_(v_ph, -1, -2, "v_T")
-    d_attn_used = g.matrixMultiplicationWithPrimaryTensor_secondaryTensor_name_(go_ph, v_T, "d_attn_used")
+    d_attn_used = g.matrixMultiplicationWithPrimaryTensor_secondaryTensor_name_(
+        go_ph, v_T, "d_attn_used",
+    )
 
     # Chain through dropout: d_attn_raw = d_attn_used * dropout_mask
     if drop_ph is not None:
-        d_attn_raw = g.multiplicationWithPrimaryTensor_secondaryTensor_name_(d_attn_used, drop_ph, "d_attn_raw")
+        d_attn_raw = g.multiplicationWithPrimaryTensor_secondaryTensor_name_(
+            d_attn_used, drop_ph, "d_attn_raw",
+        )
     else:
         d_attn_raw = d_attn_used
 
     # Softmax backward manually: d_scores = attn_raw * (d_attn_raw - sum(attn_raw * d_attn_raw))
-    ad = g.multiplicationWithPrimaryTensor_secondaryTensor_name_(attn_raw, d_attn_raw, "attn_d_attn")
+    ad = g.multiplicationWithPrimaryTensor_secondaryTensor_name_(
+        attn_raw, d_attn_raw, "attn_d_attn",
+    )
     sum_ad = g.reductionSumWithTensor_axis_name_(ad, -1, "sum_attn_d_attn")
-    diff = g.subtractionWithPrimaryTensor_secondaryTensor_name_(d_attn_raw, sum_ad, "d_attn_minus_sum")
+    diff = g.subtractionWithPrimaryTensor_secondaryTensor_name_(
+        d_attn_raw, sum_ad, "d_attn_minus_sum",
+    )
     d_scores = g.multiplicationWithPrimaryTensor_secondaryTensor_name_(attn_raw, diff, "d_scores")
-    d_scores_scaled = g.multiplicationWithPrimaryTensor_secondaryTensor_name_(d_scores, scale_t, "d_scores_scaled")
+    d_scores_scaled = g.multiplicationWithPrimaryTensor_secondaryTensor_name_(
+        d_scores, scale_t, "d_scores_scaled",
+    )
 
     # dQ = d_scores_scaled @ K
-    dQ_t = g.matrixMultiplicationWithPrimaryTensor_secondaryTensor_name_(d_scores_scaled, k_ph, "dQ")
+    dQ_t = g.matrixMultiplicationWithPrimaryTensor_secondaryTensor_name_(
+        d_scores_scaled, k_ph, "dQ",
+    )
     # dK = d_scores_scaled^T @ Q
-    d_scores_T = g.transposeTensor_dimension_withDimension_name_(d_scores_scaled, -1, -2, "d_scores_T")
+    d_scores_T = g.transposeTensor_dimension_withDimension_name_(
+        d_scores_scaled, -1, -2, "d_scores_T",
+    )
     dK_t = g.matrixMultiplicationWithPrimaryTensor_secondaryTensor_name_(d_scores_T, q_ph, "dK")
 
     _bwd_graph_cache[key] = (g, q_ph, k_ph, v_ph, go_ph, mask_ph, drop_ph, dQ_t, dK_t, dV_t)
@@ -349,9 +382,15 @@ def _mpsgraph_backward_inner(
     dQ_buf = _device.newBufferWithLength_options_(q_nbytes, _MTL_STORAGE_SHARED)
     dK_buf = _device.newBufferWithLength_options_(kv_nbytes, _MTL_STORAGE_SHARED)
     dV_buf = _device.newBufferWithLength_options_(kv_nbytes, _MTL_STORAGE_SHARED)
-    dQ_td = MPSGraphTensorData.alloc().initWithMTLBuffer_shape_dataType_(dQ_buf, list(q.shape), dtype_val)
-    dK_td = MPSGraphTensorData.alloc().initWithMTLBuffer_shape_dataType_(dK_buf, list(k.shape), dtype_val)
-    dV_td = MPSGraphTensorData.alloc().initWithMTLBuffer_shape_dataType_(dV_buf, list(v.shape), dtype_val)
+    dQ_td = MPSGraphTensorData.alloc().initWithMTLBuffer_shape_dataType_(
+        dQ_buf, list(q.shape), dtype_val,
+    )
+    dK_td = MPSGraphTensorData.alloc().initWithMTLBuffer_shape_dataType_(
+        dK_buf, list(k.shape), dtype_val,
+    )
+    dV_td = MPSGraphTensorData.alloc().initWithMTLBuffer_shape_dataType_(
+        dV_buf, list(v.shape), dtype_val,
+    )
     results = {dQ_t: dQ_td, dK_t: dK_td, dV_t: dV_td}
 
     g.runWithMTLCommandQueue_feeds_targetOperations_resultsDictionary_(
@@ -385,12 +424,65 @@ def _build_additive_mask(bool_mask: torch.Tensor, dtype: torch.dtype) -> torch.T
 # which runs a one-time micro-benchmark on first import and caches to
 # ~/.cache/mps_sdpa/thresholds.json. Set MPS_SDPA_SKIP_CALIBRATION=1 to force the
 # conservative M4-tuned defaults (used by tests to keep imports fast).
-from . import _calibrate  # noqa: E402
+from . import _calibrate  # noqa: E402  (after backend registration to avoid cycles)
 
-
-import logging as _logging
-import os as _os
 _logger = _logging.getLogger("mps_sdpa.mpsgraph")
+
+
+def _is_oom(exc: BaseException) -> bool:
+    """True iff exc represents an MPS out-of-memory condition.
+
+    Mirrors the helper in backends/mpsgraph_zc.py. torch.OutOfMemoryError
+    is the canonical class (stable since torch 2.4); some MPS paths still
+    raise plain RuntimeError with substring 'out of memory' or 'MPS allocated'.
+    """
+    if isinstance(exc, torch.OutOfMemoryError):
+        return True
+    msg = str(exc).lower()
+    return "out of memory" in msg or "mps allocated" in msg
+
+
+# Canonical fallback reason buckets. Reason strings passed to _log_fallback
+# are free-form (often include shape values like "short-seq (2097152 < ...)
+# bytes"); we bucket them via _bucket_for() into a stable set so the per-
+# reason counter at api.get_fallback_stats() is meaningful. Keep these names
+# stable — users may reference them in monitoring / dashboards.
+_FALLBACK_BUCKETS = (
+    "short-seq",
+    "dtype-unsupported",
+    "mask-shape-unsupported",
+    "causal-and-explicit-mask",
+    "dropout-window",
+    "OOM-recovery",
+    "non-MPS",
+    "ext-unavailable",
+    "GQA",
+    "other",
+)
+
+
+def _bucket_for(reason: str) -> str:
+    """Map a free-form reason string to one of the canonical buckets in _FALLBACK_BUCKETS."""
+    r = reason.lower()
+    if "short-seq" in r or "short seq" in r:
+        return "short-seq"
+    if "unsupported dtype" in r or ("dtype" in r and "unsupported" in r):
+        return "dtype-unsupported"
+    if "mask shape" in r or "mask-shape" in r or "mask spatial" in r:
+        return "mask-shape-unsupported"
+    if "causal" in r and ("mask" in r or "attn_mask" in r):
+        return "causal-and-explicit-mask"
+    if "dropout" in r and ("window" in r or "outside" in r):
+        return "dropout-window"
+    if "oom" in r or "out of memory" in r:
+        return "OOM-recovery"
+    if "non-mps" in r or "non mps" in r:
+        return "non-MPS"
+    if "ext-unavailable" in r or "extension" in r:
+        return "ext-unavailable"
+    if "gqa" in r:
+        return "GQA"
+    return "other"
 
 
 def _log_fallback(reason: str) -> None:
@@ -403,8 +495,9 @@ def _log_fallback(reason: str) -> None:
     # Increment the stock-fallback counter so api.get_call_stats() reflects the
     # true number of calls that ended up on stock via the mpsgraph path.
     try:
-        from ..api import _call_counts
+        from ..api import _call_counts, _fallback_counters
         _call_counts["stock_fallback"] += 1
+        _fallback_counters[_bucket_for(reason)] += 1
     except Exception:
         pass
     mode = _os.environ.get("MPS_SDPA_LOG_FALLBACKS", "").lower()
@@ -566,7 +659,8 @@ def mpsgraph_sdpa(
                                    reason=f"dropout attn_bytes {attn_bytes_drop} "
                                           f"outside window [{drop_min}, {drop_max}]")
         keep = 1.0 - dropout_p
-        dropout_mask = (torch.rand(B, H, Lq, Lkv, device="mps", dtype=q.dtype) < keep).to(q.dtype) / keep
+        rand = torch.rand(B, H, Lq, Lkv, device="mps", dtype=q.dtype)
+        dropout_mask = (rand < keep).to(q.dtype) / keep
 
     # Autograd path — this is the true "mpsgraph succeeded" counter increment
     try:
@@ -578,9 +672,14 @@ def mpsgraph_sdpa(
         if q.requires_grad or k.requires_grad or v.requires_grad:
             return _MpsGraphSDPAFunction.apply(q, k, v, mask_tensor, is_causal, scale, dropout_mask)
         return _mpsgraph_forward_inner(q, k, v, mask_tensor, is_causal, scale, dropout_mask)
-    except RuntimeError as e:
-        # Graceful OOM fallback (torch raises RuntimeError on MPS OOM).
-        if "out of memory" in str(e).lower() or "mps allocated" in str(e).lower():
+    except (torch.OutOfMemoryError, RuntimeError) as e:
+        # Graceful OOM fallback (torch raises torch.OutOfMemoryError or
+        # plain RuntimeError on MPS OOM depending on path).
+        if _is_oom(e):
+            try:
+                torch.mps.empty_cache()
+            except Exception:
+                pass
             return _fallback_stock(q, k, v, attn_mask=attn_mask, dropout_p=dropout_p,
                                    is_causal=is_causal, scale=scale,
                                    reason=f"OOM recovery: {type(e).__name__}")

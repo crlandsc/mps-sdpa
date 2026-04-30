@@ -12,6 +12,7 @@ except _PackageNotFoundError:
 # MPS_SDPA_FORCE_WANDB_OFFLINE=1 to opt in (useful for sandboxed test runs
 # that must not contact wandb.ai).
 import os as _os
+
 if _os.environ.get("MPS_SDPA_FORCE_WANDB_OFFLINE") == "1":
     from .utils import env as _env
     _env.force_wandb_offline()
@@ -20,11 +21,14 @@ if _os.environ.get("MPS_SDPA_FORCE_WANDB_OFFLINE") == "1":
 # imports of sibling subpackages don't blow up if `.api` isn't present yet.
 try:
     from .api import (  # noqa: E402
-        sdpa_opt,
-        set_default_backend,
         available_backends,
         backend_status,
+        get_fallback_stats,
         print_backend_banner,
+        print_fallback_stats,
+        reset_fallback_stats,
+        sdpa_opt,
+        set_default_backend,
     )
     __all__ = [
         "sdpa_opt",
@@ -32,6 +36,9 @@ try:
         "available_backends",
         "backend_status",
         "print_backend_banner",
+        "get_fallback_stats",
+        "print_fallback_stats",
+        "reset_fallback_stats",
     ]
 except ImportError:
     __all__ = []

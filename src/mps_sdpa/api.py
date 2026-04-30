@@ -1,7 +1,10 @@
 """Public API: drop-in replacement for F.scaled_dot_product_attention on MPS."""
 from __future__ import annotations
+
 import warnings
+from collections import Counter as _Counter
 from typing import Optional
+
 import torch
 
 from . import backends as _backends
@@ -12,8 +15,13 @@ _banner_printed = False
 
 # Per-process dispatch counters. Increment inside sdpa_opt based on which
 # path was actually taken. Useful for confirming opt is live during training.
-from collections import Counter as _Counter
 _call_counts: "_Counter[str]" = _Counter()
+
+# Per-reason fallback counters. Incremented by mpsgraph._log_fallback()
+# when a request can't go through the fast path. Distinct from
+# _call_counts (which buckets by backend name); this buckets by reason
+# so users can see why their hot path is going to stock.
+_fallback_counters: "_Counter[str]" = _Counter()
 
 
 def get_call_stats() -> dict:
@@ -39,6 +47,32 @@ def print_call_stats(tag: str = "") -> None:
         return
     parts = [f"{name}={cnt} ({cnt*100//total}%)" for name, cnt in c.most_common()]
     print(f"[mps-sdpa stats{' '+tag if tag else ''}] total={total}  " + "  ".join(parts),
+          flush=True)
+
+
+def get_fallback_stats() -> dict:
+    """Snapshot of fallback-reason counters since process start.
+
+    Returns e.g. {"short-seq": 134, "dropout-window": 12, "OOM-recovery": 1}.
+    Buckets are defined in mpsgraph._FALLBACK_BUCKETS.
+    """
+    return dict(_fallback_counters)
+
+
+def reset_fallback_stats() -> None:
+    """Reset per-reason fallback counters."""
+    _fallback_counters.clear()
+
+
+def print_fallback_stats(tag: str = "") -> None:
+    """Print a one-line summary of fallback-reason counts."""
+    c = _fallback_counters
+    total = sum(c.values())
+    if total == 0:
+        print(f"[mps-sdpa fallback{' '+tag if tag else ''}] no fallbacks recorded")
+        return
+    parts = [f"{name}={cnt} ({cnt*100//total}%)" for name, cnt in c.most_common()]
+    print(f"[mps-sdpa fallback{' '+tag if tag else ''}] total={total}  " + "  ".join(parts),
           flush=True)
 
 
@@ -109,20 +143,20 @@ def print_backend_banner(
     }.get(picked, picked)
 
     lines = [bar]
-    lines.append(f"  mps-sdpa preflight" + (f"  [{tag}]" if tag else ""))
+    lines.append("  mps-sdpa preflight" + (f"  [{tag}]" if tag else ""))
     lines.append(f"  torch: {status['torch_version']}   "
                  f"mps-sdpa: {status['mps_sdpa_version']}")
     lines.append(f"  requested backend: {status['requested_backend']!r}  ->  "
                  f"picked: {picked}  ({backend_desc})")
     if status["unavailable"]:
-        lines.append(f"  unavailable backends:")
+        lines.append("  unavailable backends:")
         for name, reason in status["unavailable"].items():
             short = reason.split(":")[0] if ":" in reason else reason
             lines.append(f"    - {name}: {short}")
     if status["active"]:
-        lines.append(f"  STATUS: ACTIVE  [OK]  (calls route through mps-sdpa)")
+        lines.append("  STATUS: ACTIVE  [OK]  (calls route through mps-sdpa)")
     else:
-        lines.append(f"  STATUS: INACTIVE  [!]  (falling back to stock torch SDPA)")
+        lines.append("  STATUS: INACTIVE  [!]  (falling back to stock torch SDPA)")
     lines.append(bar)
     print("\n".join(lines), flush=True)
 
