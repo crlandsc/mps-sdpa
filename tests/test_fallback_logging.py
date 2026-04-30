@@ -5,13 +5,13 @@ consistent `[mps_sdpa.mpsgraph] falling back to stock: <reason>` format.
 Default log level is DEBUG (silent). Opt in via env var.
 """
 from __future__ import annotations
+
 import logging
 import os
 
 import pytest
 import torch
 
-from mps_sdpa import sdpa_opt
 from mps_sdpa.backends import mpsgraph as _mg
 
 

@@ -1,6 +1,6 @@
 """Backend registry + dispatch tests."""
 import pytest
-import torch
+
 from mps_sdpa import backends
 
 

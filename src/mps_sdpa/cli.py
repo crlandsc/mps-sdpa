@@ -1,5 +1,6 @@
 """mps_sdpa command-line interface."""
 from __future__ import annotations
+
 import argparse
 import itertools
 import json
@@ -8,7 +9,7 @@ import sys
 
 from . import available_backends
 from .harness import correctness, report
-from .suites import correctness_shapes, realistic_shapes, general_shapes
+from .suites import correctness_shapes, general_shapes, realistic_shapes
 
 
 def _suite_iter(name: str):
@@ -23,7 +24,9 @@ def _cmd_correctness(args):
     cases = _suite_iter(args.suite)
     if args.limit:
         cases = itertools.islice(cases, args.limit)
-    summary = correctness.run_suite(backend_name=args.backend, cases=list(cases), device=args.device)
+    summary = correctness.run_suite(
+        backend_name=args.backend, cases=list(cases), device=args.device,
+    )
     out = pathlib.Path(args.out) if args.out else None
     if out:
         report.write_case_result(summary, out)
@@ -41,8 +44,10 @@ def _cmd_list_backends(args):
 def _cmd_self_test(args):
     """Quick end-to-end validation: env + imports + backends + correctness + bench."""
     import time
+
     import torch
     import torch.nn.functional as F
+
     from . import available_backends as _avail_backends
     from .backends import backend_reason
     from .utils import env as _envmod
@@ -99,6 +104,7 @@ def _cmd_self_test(args):
     bench_results: dict = {}
     if args.device == "mps" and "mpsgraph" in backends:
         import time as _t
+
         from . import sdpa_opt
         B, H, L, D = 1, 8, 2048, 64
         q = torch.randn(B, H, L, D, dtype=torch.bfloat16, device="mps")
@@ -153,10 +159,12 @@ def _cmd_self_test(args):
 def _cmd_benchmark(args):
     import itertools as _it
     import json as _json
+
     from .backends import get_backend
     from .harness import benchmark as bm
+    from .harness import cold_latency, tensor_factory
     from .harness import memory as mm
-    from .harness import tensor_factory, cold_latency, report as rep
+    from .harness import report as rep
     cases = list(_it.islice(_suite_iter(args.suite), args.limit or None))
     baseline_fn = get_backend(args.baseline)
     candidate_fn = get_backend(args.backend)
@@ -166,10 +174,14 @@ def _cmd_benchmark(args):
         is_causal = getattr(case, "mask", "none") == "causal"
 
         def run_baseline():
-            return baseline_fn(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=is_causal, scale=None)
+            return baseline_fn(
+                q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=is_causal, scale=None,
+            )
 
         def run_candidate():
-            return candidate_fn(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=is_causal, scale=None)
+            return candidate_fn(
+                q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=is_causal, scale=None,
+            )
 
         try:
             mem = mm.measure_region(run_candidate, device=args.device)
@@ -222,7 +234,9 @@ def main(argv: list[str] | None = None) -> int:
     c = sub.add_parser("correctness", help="Run correctness suite against a backend")
     c.add_argument("--backend", required=True)
     c.add_argument("--device", default="mps")
-    c.add_argument("--suite", default="correctness", choices=["correctness", "realistic", "general"])
+    c.add_argument(
+        "--suite", default="correctness", choices=["correctness", "realistic", "general"],
+    )
     c.add_argument("--limit", type=int, default=None)
     c.add_argument("--out", default=None)
     c.set_defaults(func=_cmd_correctness)
@@ -241,8 +255,8 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--out", default=None, help="CSV path")
     b.set_defaults(func=_cmd_benchmark)
 
-    l = sub.add_parser("list-backends", help="List available backends")
-    l.set_defaults(func=_cmd_list_backends)
+    lb = sub.add_parser("list-backends", help="List available backends")
+    lb.set_defaults(func=_cmd_list_backends)
 
     s = sub.add_parser("self-test", help="Quick end-to-end validation (<30s)")
     s.add_argument("--device", default="mps")

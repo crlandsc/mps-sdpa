@@ -42,10 +42,10 @@ class _DepthTwoAttention(nn.Module):
 
     def _block(self, x, proj):
         x = self._attn(x)
-        b, h, l, d = x.shape
-        x_flat = x.reshape(b * h * l, d)
+        b, h, seq, d = x.shape
+        x_flat = x.reshape(b * h * seq, d)
         x_flat = proj(x_flat)
-        return x_flat.reshape(b, h, l, d)
+        return x_flat.reshape(b, h, seq, d)
 
     def forward(self, x):
         if self.use_ckpt:

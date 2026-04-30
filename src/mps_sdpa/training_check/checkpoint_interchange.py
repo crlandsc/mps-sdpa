@@ -1,8 +1,10 @@
 """Checkpoint interchange: save with one path, load with the other, compare outputs."""
 from __future__ import annotations
+
 import torch
-from . import synthetic_train as st
+
 from ..harness import tolerances
+from . import synthetic_train as st
 
 
 def _train_and_serialize(*, use_opt: bool, device: str, steps: int, seed: int):

@@ -1,11 +1,14 @@
-import pytest
 import torch
+
 from mps_sdpa.harness import correctness
 from mps_sdpa.suites.correctness_shapes import Case
 
 
 def _small_case(mask="none", dtype="fp32"):
-    return Case(case_id="s", B=1, H=2, Lq=8, Lkv=8, D=16, dtype=dtype, mask=mask, contiguous=True, dropout_p=0.0)
+    return Case(
+        case_id="s", B=1, H=2, Lq=8, Lkv=8, D=16,
+        dtype=dtype, mask=mask, contiguous=True, dropout_p=0.0,
+    )
 
 
 def test_stock_vs_math_reference_passes():

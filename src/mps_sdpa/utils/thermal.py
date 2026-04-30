@@ -1,8 +1,9 @@
 """Thermal / system-load reader. Uses pyobjc for thermal; psutil for the rest."""
 from __future__ import annotations
-import os
-import psutil
 
+import os
+
+import psutil
 
 _THERMAL_STATE_NAMES = {0: "nominal", 1: "fair", 2: "serious", 3: "critical"}
 

@@ -6,7 +6,6 @@ bool and additive-float masks. Previous behavior: fell back to stock on
 anything other than (1, 1, Lq, Lkv).
 """
 from __future__ import annotations
-import itertools
 
 import pytest
 import torch

@@ -1,11 +1,14 @@
-import pytest
 import torch
-from mps_sdpa.suites.correctness_shapes import Case
+
 from mps_sdpa.harness import tensor_factory as tf
+from mps_sdpa.suites.correctness_shapes import Case
 
 
 def _case(mask="none", dtype="fp32"):
-    return Case(case_id="t", B=1, H=2, Lq=4, Lkv=4, D=8, dtype=dtype, mask=mask, contiguous=True, dropout_p=0.0)
+    return Case(
+        case_id="t", B=1, H=2, Lq=4, Lkv=4, D=8,
+        dtype=dtype, mask=mask, contiguous=True, dropout_p=0.0,
+    )
 
 
 def test_build_produces_correct_shapes():

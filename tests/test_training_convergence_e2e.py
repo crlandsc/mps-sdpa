@@ -1,7 +1,6 @@
 """End-to-end: stock (opt=False) vs stock-via-opt (opt=True) on CPU should be identical."""
-import pytest
-from mps_sdpa.training_check import synthetic_train as st
 from mps_sdpa.training_check import loss_compare as lc
+from mps_sdpa.training_check import synthetic_train as st
 
 
 def test_stock_vs_opt_cpu_fp32_identical():

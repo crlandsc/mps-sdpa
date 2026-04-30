@@ -1,5 +1,6 @@
 """General secondary suite (Tier-2). Uniform weight, includes causal."""
 from __future__ import annotations
+
 from itertools import product
 from typing import Iterator
 

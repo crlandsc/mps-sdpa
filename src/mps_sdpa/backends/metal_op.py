@@ -7,6 +7,7 @@ with a reason string so it shows up cleanly in the backend banner without
 being auto-selected.
 """
 from __future__ import annotations
+
 from . import register_backend
 
 

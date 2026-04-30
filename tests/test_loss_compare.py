@@ -1,4 +1,3 @@
-import pytest
 from mps_sdpa.training_check import loss_compare as lc
 
 

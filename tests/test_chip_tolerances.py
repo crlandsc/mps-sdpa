@@ -16,7 +16,6 @@ import torch
 from tests import _tolerances
 from tests._tolerances import cross_impl_atol
 
-
 # Pinned values — if these change, the helper's constants need to change
 # too. These tests are the regression check that the policy is intact.
 _STRICT_BF16 = 5e-3

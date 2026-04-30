@@ -10,10 +10,9 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from mps_sdpa import sdpa_opt, available_backends
-from mps_sdpa.backends import mpsgraph_zc as _zc
+from mps_sdpa import available_backends, sdpa_opt
 from mps_sdpa.backends import mpsgraph as _mg
-
+from mps_sdpa.backends import mpsgraph_zc as _zc
 from tests._tolerances import cross_impl_atol
 
 

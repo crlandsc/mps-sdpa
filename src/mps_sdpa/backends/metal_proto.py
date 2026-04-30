@@ -15,12 +15,10 @@ not auto-selected — `api._pick_auto()` skips it. To exercise:
 See `docs/design/custom-kernel-experiment.md` for the rationale.
 """
 from __future__ import annotations
-from typing import Optional
 
 import torch
 
 from . import register_backend
-
 
 _SRC = r"""
 #include <metal_stdlib>

@@ -115,8 +115,8 @@ def test_transformer_trains():
     losses_o = run(True)   # opt (zc) path
 
     # No NaN anywhere
-    assert all(l == l for l in losses_s), "stock produced NaN"
-    assert all(l == l for l in losses_o), "opt produced NaN"
+    assert all(loss == loss for loss in losses_s), "stock produced NaN"
+    assert all(loss == loss for loss in losses_o), "opt produced NaN"
 
     # Trajectories must track within reasonable envelope (window-mean).
     early_s = sum(losses_s[:10]) / 10

@@ -1,6 +1,8 @@
 """Tiny pure-PyTorch trainer for convergence equivalence. No Lightning, no W&B."""
 from __future__ import annotations
+
 import contextlib
+
 import torch
 import torch.nn as nn
 
@@ -22,7 +24,10 @@ class _TinyAttention(nn.Module):
         qkv = self.to_qkv(x).view(B, L, 3, self.heads, self.dim_head).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]
         if self.use_opt:
-            out = sdpa_opt(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False, scale=self.scale, backend="auto")
+            out = sdpa_opt(
+                q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False,
+                scale=self.scale, backend="auto",
+            )
         else:
             out = torch.nn.functional.scaled_dot_product_attention(
                 q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False, scale=self.scale,
@@ -31,7 +36,9 @@ class _TinyAttention(nn.Module):
         return self.to_out(out)
 
 
-def build_tiny_module(*, dim: int = 64, heads: int = 2, depth: int = 2, use_opt: bool = False) -> nn.Module:
+def build_tiny_module(
+    *, dim: int = 64, heads: int = 2, depth: int = 2, use_opt: bool = False,
+) -> nn.Module:
     layers: list[nn.Module] = []
     for _ in range(depth):
         layers.append(_TinyAttention(dim, heads, use_opt))

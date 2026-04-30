@@ -1,5 +1,5 @@
-import pytest
 import torch
+
 from mps_sdpa.harness import reference
 
 

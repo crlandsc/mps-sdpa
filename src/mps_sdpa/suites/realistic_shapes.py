@@ -8,6 +8,7 @@ weights dominate — that's where the speedup matters most.
 Used by the CLI's `benchmark` subcommand and by the auto-calibration probe.
 """
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Iterator
 

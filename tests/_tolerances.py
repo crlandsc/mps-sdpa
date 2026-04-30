@@ -30,7 +30,6 @@ import subprocess
 
 import torch
 
-
 # Strict math-reference tolerances, matching COMPAT.md's correctness contract.
 _STRICT_BF16 = 5e-3
 _STRICT_FP16 = 5e-3

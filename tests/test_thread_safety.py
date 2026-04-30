@@ -8,6 +8,7 @@ execution (Metal command queues aren't thread-safe; callers are expected to
 serialize kernel dispatch).
 """
 from __future__ import annotations
+
 import threading
 
 import pytest

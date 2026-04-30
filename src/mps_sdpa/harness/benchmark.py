@@ -1,9 +1,11 @@
 """Benchmark timing: warmup, hot-latency distribution, paired A/B."""
 from __future__ import annotations
+
 import math
 import statistics
 import time
 from typing import Callable
+
 import torch
 
 
@@ -54,8 +56,14 @@ def paired_ab(
     ratios: list[float] = []
     per_pair: list[tuple[float, float]] = []
     for _ in range(n_pairs):
-        b = time_region(baseline_fn, warmup=warmup, min_iters=min_iters, min_seconds=min_seconds, device=device)
-        c = time_region(candidate_fn, warmup=warmup, min_iters=min_iters, min_seconds=min_seconds, device=device)
+        b = time_region(
+            baseline_fn, warmup=warmup, min_iters=min_iters,
+            min_seconds=min_seconds, device=device,
+        )
+        c = time_region(
+            candidate_fn, warmup=warmup, min_iters=min_iters,
+            min_seconds=min_seconds, device=device,
+        )
         per_pair.append((b["median"], c["median"]))
         ratios.append(c["median"] / b["median"])
     log_mean = sum(math.log(r) for r in ratios) / len(ratios)

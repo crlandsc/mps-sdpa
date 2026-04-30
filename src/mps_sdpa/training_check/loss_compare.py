@@ -1,5 +1,6 @@
 """Compare stock vs opt loss curves for equivalence."""
 from __future__ import annotations
+
 import math
 import statistics
 from typing import Sequence

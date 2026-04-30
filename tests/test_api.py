@@ -1,7 +1,8 @@
 """Public API contract tests."""
 import pytest
 import torch
-from mps_sdpa import sdpa_opt, available_backends, set_default_backend
+
+from mps_sdpa import available_backends, sdpa_opt, set_default_backend
 
 
 @pytest.fixture
@@ -34,8 +35,10 @@ def test_unknown_backend_raises(qkv_cpu):
 
 def test_gqa_falls_back_to_stock(qkv_cpu):
     """GQA (Hq != Hkv) routes to stock with a one-time warning."""
-    import torch.nn.functional as F
     import warnings
+
+    import torch.nn.functional as F
+
     from mps_sdpa import api as _api
     q, _, _ = qkv_cpu  # q has 4 heads
     # Reset one-time-warning flag so the test is deterministic.
@@ -56,6 +59,7 @@ def test_gqa_falls_back_to_stock(qkv_cpu):
 def test_gqa_warning_emitted_only_once(qkv_cpu):
     """The GQA fallback warning must fire at most once per process."""
     import warnings
+
     from mps_sdpa import api as _api
     q, _, _ = qkv_cpu
     k = torch.randn(1, 2, 16, 32, dtype=torch.float32)

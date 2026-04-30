@@ -111,8 +111,8 @@ def test_fp16_long_horizon_amp_convergence():
     losses_o = run(True)
 
     # No NaN
-    assert all(l == l for l in losses_s), "stock fp16 had NaN"
-    assert all(l == l for l in losses_o), "opt fp16 had NaN"
+    assert all(loss == loss for loss in losses_s), "stock fp16 had NaN"
+    assert all(loss == loss for loss in losses_o), "opt fp16 had NaN"
     # Both converged
     assert losses_s[-1] < losses_s[0], "stock fp16 didn't train"
     assert losses_o[-1] < losses_o[0], "opt fp16 didn't train"

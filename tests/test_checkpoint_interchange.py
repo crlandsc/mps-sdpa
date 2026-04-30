@@ -1,5 +1,3 @@
-import pytest
-import torch
 from mps_sdpa.training_check import checkpoint_interchange as ci
 
 

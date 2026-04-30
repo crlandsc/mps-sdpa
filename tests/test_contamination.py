@@ -1,4 +1,3 @@
-import pytest
 from mps_sdpa.harness import contamination as cm
 
 

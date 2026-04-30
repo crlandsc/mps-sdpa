@@ -1,9 +1,11 @@
 """Reference implementations for correctness validation."""
 from __future__ import annotations
+
 from typing import Optional
+
 import torch
 import torch.nn.functional as F
-from torch.nn.attention import sdpa_kernel, SDPBackend
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 
 def math_reference(

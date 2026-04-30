@@ -1,9 +1,10 @@
 """Environment management: W&B kill-switch, MPS env knobs, preflight."""
 from __future__ import annotations
-import os
-import sys
-import platform
+
 import contextlib
+import os
+import platform
+import sys
 from typing import Iterator, Optional
 
 

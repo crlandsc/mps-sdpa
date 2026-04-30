@@ -1,7 +1,9 @@
 """Environment utility tests."""
 import os
 import sys
+
 import pytest
+
 from mps_sdpa.utils import env
 
 

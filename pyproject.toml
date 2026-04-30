@@ -48,6 +48,21 @@ Issues = "https://github.com/crlandsc/mps-sdpa/issues"
 Changelog = "https://github.com/crlandsc/mps-sdpa/blob/main/CHANGELOG.md"
 Source = "https://github.com/crlandsc/mps-sdpa"
 
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# Default: pycodestyle errors (E), pyflakes (F), pycodestyle warnings (W),
+# isort (I). These match the "ruff-default rules" in CONTRIBUTING.md but
+# explicit here so the convention is codified rather than implicit.
+select = ["E", "F", "W", "I"]
+# Allow unused imports in __init__.py (re-exports are intentional).
+per-file-ignores = { "__init__.py" = ["F401"] }
+
+[tool.ruff.lint.isort]
+known-first-party = ["mps_sdpa"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

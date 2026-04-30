@@ -1,5 +1,4 @@
 """Thermal state reader tests."""
-import pytest
 from mps_sdpa.utils import thermal
 
 

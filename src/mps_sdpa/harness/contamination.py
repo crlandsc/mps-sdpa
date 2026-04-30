@@ -1,5 +1,6 @@
 """Contamination detection for benchmark sessions (thermal + load + RAM rejection)."""
 from __future__ import annotations
+
 from typing import Iterable
 
 

@@ -5,6 +5,7 @@ binary is cached under $TORCH_EXTENSIONS_DIR (typically ~/.cache/torch_extension
 Subsequent calls reuse the cache.
 """
 from __future__ import annotations
+
 import os
 from pathlib import Path
 from typing import Optional

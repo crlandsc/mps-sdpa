@@ -1,5 +1,5 @@
-import pytest
 import torch
+
 from mps_sdpa.training_check import synthetic_train as st
 
 

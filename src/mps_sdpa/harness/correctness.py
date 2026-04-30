@@ -1,6 +1,8 @@
 """Correctness checker: compares a backend's output to math reference per case."""
 from __future__ import annotations
+
 from typing import Any
+
 import torch
 
 from ..backends import get_backend
@@ -11,7 +13,10 @@ from . import reference, tensor_factory, tolerances
 def _is_oom(exc: Exception) -> bool:
     """Heuristic for OOM / buffer-size errors on MPS (known stock crash on long seqs)."""
     msg = str(exc).lower()
-    return any(s in msg for s in ("out of memory", "oom", "buffer size", "total bytes of tensor exceeds"))
+    return any(
+        s in msg
+        for s in ("out of memory", "oom", "buffer size", "total bytes of tensor exceeds")
+    )
 
 
 def check_case(*, backend_name: str, case: Case, device: str = "cpu") -> dict[str, Any]:
@@ -72,7 +77,9 @@ def check_case(*, backend_name: str, case: Case, device: str = "cpu") -> dict[st
             result["failure_class"] = "soft"
         return result
 
-    ref = reference.math_reference(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=is_causal, scale=None)
+    ref = reference.math_reference(
+        q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=is_causal, scale=None,
+    )
 
     if out.shape != ref.shape:
         result["failure_class"] = "hard"

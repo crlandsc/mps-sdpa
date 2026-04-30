@@ -1,10 +1,10 @@
 """Cold-latency measurement via fresh subprocess (eliminates intra-process warm-up cache)."""
 from __future__ import annotations
+
 import json
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 _RUNNER = r"""
 import json, sys, time

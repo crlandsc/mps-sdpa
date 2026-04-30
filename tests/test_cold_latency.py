@@ -1,5 +1,3 @@
-import pytest
-import torch
 from mps_sdpa.harness import cold_latency as cl
 
 

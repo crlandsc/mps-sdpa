@@ -1,6 +1,6 @@
 """Stock backend: delegates to torch.nn.functional.scaled_dot_product_attention."""
 from __future__ import annotations
-import torch
+
 import torch.nn.functional as F
 
 from . import register_backend
