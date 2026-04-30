@@ -18,23 +18,46 @@ on:
   workflow_call:
 
 jobs:
+  lint:
+    name: Lint with ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Run ruff
+        run: ruff check src tests
+
   test:
-    name: Run tests on Apple silicon
+    name: Tests Py${{ matrix.python-version }}
     # MPS is only available on macOS arm64 runners. Linux runners would skip
     # every MPS-gated test silently. macos-latest currently maps to an Apple
     # silicon SKU and ships Xcode CLT, which the zero-copy C++ extension
     # needs to JIT-compile.
     runs-on: macos-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        # Catches Python C-API drift between minors (3.13 free-threading is the
+        # biggest delta from 3.11). 3.10 / 3.12 are exercised in nightly.yml.
+        python-version: ["3.11", "3.13"]
+
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
         run: |
