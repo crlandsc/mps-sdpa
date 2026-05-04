@@ -45,9 +45,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Catches Python C-API drift between minors (3.13 free-threading is the
-        # biggest delta from 3.11). 3.10 / 3.12 are exercised in nightly.yml.
-        python-version: ["3.11", "3.13"]
+        # Full supported Python matrix on every push/PR. Catches C-API drift
+        # between minors (3.13 free-threading is the biggest delta from 3.11).
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v5

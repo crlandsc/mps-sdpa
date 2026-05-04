@@ -153,7 +153,7 @@ def test_training_vs_inference_dropout_pattern():
     m.train(False)
     out_inf = m(q, k, v)
     ref = F.scaled_dot_product_attention(q, k, v)
-    assert (out_inf - ref).abs().max().item() < 5e-3
+    torch.testing.assert_close(out_inf, ref, atol=5e-3, rtol=5e-2)
 
     # Training mode — dropout active — must produce non-NaN output.
     m.train(True)

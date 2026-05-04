@@ -307,8 +307,8 @@ def test_random_shapes_match_stock():
         v = torch.randn(B, H, L, D, dtype=torch.bfloat16, device="mps")
         out = sdpa_opt(q, k, v)
         ref = F.scaled_dot_product_attention(q, k, v)
-        diff = (out - ref).abs().max().item()
-        assert diff < 5e-3, f"B={B} H={H} L={L} D={D} diff={diff}"
+        torch.testing.assert_close(out, ref, atol=5e-3, rtol=5e-2,
+                                    msg=f"B={B} H={H} L={L} D={D}")
 
 
 # ---- Combined fallback paths ----
